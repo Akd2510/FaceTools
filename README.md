@@ -70,3 +70,9 @@ Open your browser and navigate to:
 *   **Microservices:** Services are isolated with specific dependencies (`bookworm` for AI, `alpine` for Gateway).
 *   **Routing:** Nginx handles `/api/` (Django) and `/swap/` (FastAPI) transparently.
 *   **Performance:** Preloaded AI models on startup to ensure minimal latency during user interaction.
+
+---
+
+## 📜 Credits & Acknowledgments
+
+The **FaceVision** engine and initial architectural foundations were inspired by and adapted from the [facevision](https://github.com/Prateekshenoy/facevision) repository by **Prateekshenoy**. Special thanks for the high-quality forensic face analysis pipeline and clustering logic.
