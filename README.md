@@ -1,65 +1,72 @@
-# FaceSwap Pro Local
+# 🎭 FaceTools Suite
 
-A local web application for high-quality face-head swapping. Everything runs locally on your CPU — no cloud APIs, no GPU required.
+A professional, high-performance AI suite for face manipulation, identity management, and forensic-grade clustering. **FaceTools** integrates two powerful engines—**FaceSwap** and **FaceVision**—into a unified microservices architecture with a premium React frontend.
 
-## Features
-- **Robust Detection:** Uses UniFace (YOLOv8 + 106pt Landmark Refinement).
-- **Identity Transfer:** Uses Inswapper 128 for natural face replacement.
-- **Seamless Blending:** XSeg masking, LAB color correction, and Poisson blending.
-- **Face Restoration:** Optional GFPGAN v1.4 enhancement for crisp results.
-- **Full Resolution:** Processes images at up to 1024px while maintaining quality.
+---
 
-## Project Structure
-```
-faceswap-app/
-├── backend/            # FastAPI application logic
-├── frontend/           # Vanilla JS/HTML/CSS UI
-├── models/             # ONNX model files (download required)
-├── templates/          # Pre-loaded target scenes
-└── requirements.txt
-```
+## 🚀 Key Features
 
-## Setup Instructions
+### 🔄 FaceSwap Engine (FastAPI)
+*   **Identity Transfer:** Seamlessly swap faces using `inswapper_128.onnx`.
+*   **Face Restoration:** Integrated **GFPGAN v1.4** for ultra-crisp results.
+*   **Advanced Blending:** Multi-tier fallback masking (XSeg/BiSeNet) with Poisson seamless cloning for natural skin-tone matching.
+*   **Real-time Processing:** Optimized for high-throughput AI inference.
 
-### 1. Install Dependencies
-Ensure you have Python 3.9+ installed.
-```bash
-pip install -r requirements.txt
-```
+### 🔍 FaceVision Engine (Django)
+*   **Identity Clustering:** Automatic person grouping using **DBSCAN** on 512-dim ArcFace embeddings.
+*   **Search & Retrieval:** Find similar faces across thousands of images using cosine similarity.
+*   **Database Management:** Robust PostgreSQL-backed metadata storage for forensic analysis.
+*   **Async Pipeline:** Background processing of large image batches via integrated worker tasks.
 
-### 2. Download Required Models
-Only two models need manual download. The UniFace models will auto-download on first run.
+### 💻 Unified Interface (React)
+*   **Premium Tech Aesthetic:** Glassmorphism UI with professional typography (**Plus Jakarta Sans**).
+*   **Live Analytics:** Real-time metrics dashboard for processing status and system health.
+*   **Integrated Gateway:** All features accessible via a single Nginx entry point on port 80.
 
-**Inswapper 128 (Identity Transfer):**
-- [Download inswapper_128.onnx](https://huggingface.co/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx)
-- Place at: `models/inswapper_128.onnx`
+---
 
-**GFPGAN v1.4 (Restoration):**
-- [Download gfpgan_1.4.onnx](https://huggingface.co/facefusion/models-3.0.0/resolve/main/gfpgan_1.4.onnx)
-- Place at: `models/gfpgan_1.4.onnx`
+## 🏗️ Architecture
 
-### 3. Add Templates
-Place your favorite target images (JPG/PNG) into the `templates/` directory. They will appear in the grid when you start the app.
-
-### 4. Run the Application
-```bash
-# From the faceswap-app/ directory
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+```text
+/faceswap-backend/   -> FastAPI (AI Processing)
+/facevision-backend/ -> Django (Data & Clustering)
+/frontend/           -> React (Unified UI)
+/nginx/              -> Gateway / Reverse Proxy
+/models/             -> Shared AI Model Weights
+/templates/          -> FaceSwap Templates
 ```
 
-### 5. Open in Browser
-Visit [http://localhost:8000](http://localhost:8000)
+---
 
-## Implementation Details
-- **Backend:** FastAPI
-- **Inference:** ONNX Runtime (CPUExecutionProvider)
-- **Face Analysis:** UniFace (YOLOv8, ArcFace, XSeg, LandmarkDetector)
-- **Image Processing:** OpenCV, NumPy, SciPy
+## 🛠️ Quick Start
 
-## Error Handling
-- The app handles extreme side-profile angles (>65°) by rejecting them for better quality.
-- If a face is found but angled moderately (40-65°), a warning is displayed.
-- All errors (no face detected, file too small, etc.) surface clearly in the UI.
+### 1. Prerequisites
+*   Docker & Docker Compose
+*   AI Models (place in `/models`):
+    *   `inswapper_128.onnx`
+    *   `gfpgan_1.4.onnx`
 
-## License
-MIT
+### 2. Launch Suite
+Run the orchestrator from the project root:
+```powershell
+docker-compose up --build -d
+```
+
+### 3. Access
+Open your browser and navigate to:
+👉 **[http://localhost/](http://localhost/)**
+
+---
+
+## ⚙️ Development & Maintenance
+
+*   **Logs:** `docker-compose logs -f [service_name]`
+*   **Restarting:** `docker-compose restart nginx` (to apply routing changes)
+*   **Cleanup:** `docker-compose down -v` (removes volumes and database)
+
+---
+
+## 🛡️ Engineering Standards
+*   **Microservices:** Services are isolated with specific dependencies (`bookworm` for AI, `alpine` for Gateway).
+*   **Routing:** Nginx handles `/api/` (Django) and `/swap/` (FastAPI) transparently.
+*   **Performance:** Preloaded AI models on startup to ensure minimal latency during user interaction.
