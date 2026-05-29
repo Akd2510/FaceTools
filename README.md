@@ -47,14 +47,28 @@ A professional, high-performance AI suite for face manipulation, identity manage
     *   `gfpgan_1.4.onnx`
 
 ### 2. Launch Suite
-Run the orchestrator from the project root:
+The images are pre-built and hosted on **Docker Hub**. You can pull them immediately without local builds:
 ```powershell
-docker-compose up --build -d
+# Pull images from akshatdikshit repository
+docker compose pull
+
+# Start the suite
+docker compose up -d
 ```
 
 ### 3. Access
 Open your browser and navigate to:
 👉 **[http://localhost/](http://localhost/)**
+
+---
+
+## ⚡ 2026 Optimization Updates
+The **FaceSwap** engine has been hardened for production:
+*   **Non-Blocking Concurrency:** Inference offloaded to worker threads via `asyncio`.
+*   **Concurrent Networking:** Parallel URL downloads using `httpx`.
+*   **Hardware Acceleration:** Dynamic GPU/CPU (CUDA) fallback auto-detection.
+*   **Structured Logging:** Professional production logs for monitoring.
+*   **CURL Documentation:** See `docs/CURL_TESTS.md` for API usage.
 
 ---
 
