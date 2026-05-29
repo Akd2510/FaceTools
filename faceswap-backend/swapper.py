@@ -3,8 +3,13 @@ inswapper_128.onnx wrapper using InsightFace's model_zoo loader.
 This is the ONLY file in the project that imports insightface.
 """
 
+import logging
+
 import insightface
 import numpy as np
+from utils import get_ort_providers
+
+logger = logging.getLogger(__name__)
 
 
 class FaceSwapper:
@@ -14,14 +19,16 @@ class FaceSwapper:
         This handles the model's internal ArcFace emap subgraph and
         custom tensor layout — not reproducible with plain onnxruntime.
         """
-        self.model = insightface.model_zoo.get_model(
-            model_path, providers=["CPUExecutionProvider"]
-        )
-        # Prepare model for CPU inference (ctx_id=-1 means CPU)
-        # inswapper does not need prepare() like FaceAnalysis does,
-        # but call it defensively if the model exposes it:
+        providers = get_ort_providers()
+        logger.info(f"Loading FaceSwapper with providers: {providers}")
+
+        self.model = insightface.model_zoo.get_model(model_path, providers=providers)
+        # Prepare model for inference.
+        # Use ctx_id=0 if CUDA is available, else -1 for CPU.
+        ctx_id = 0 if "CUDAExecutionProvider" in providers else -1
+
         if hasattr(self.model, "prepare"):
-            self.model.prepare(ctx_id=-1)
+            self.model.prepare(ctx_id=ctx_id)
 
     def swap(
         self,
@@ -44,19 +51,19 @@ class FaceSwapper:
         )
 
         # Robustness Addition 3: Swapper input/output logging
-        print(
-            f"[swapper] INPUTS: target_img.shape={target_img_bgr.shape}, "
+        logger.info(
+            f"INPUTS: target_img.shape={target_img_bgr.shape}, "
             f"target_face.kps.shape={target_face.kps.shape if target_face.kps is not None else None}, "
             f"source_face.embedding.shape={source_face.embedding.shape if source_face.embedding is not None else None}"
         )
 
         if result is not None:
-            print(
-                f"[swapper] OUTPUT: result.shape={result.shape}, result.dtype={result.dtype}, "
+            logger.info(
+                f"OUTPUT: result.shape={result.shape}, result.dtype={result.dtype}, "
                 f"min={result.min()}, max={result.max()}"
             )
         else:
-            print("[swapper] OUTPUT: result is None")
+            logger.warning("OUTPUT: result is None")
 
         if result is None:
             raise ValueError(

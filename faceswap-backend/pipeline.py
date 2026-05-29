@@ -3,6 +3,7 @@ End-to-end swap pipeline. Orchestrates all stages in correct order.
 inswapper is called here — it was missing entirely in the broken version.
 """
 
+import logging
 import os
 import time
 
@@ -15,23 +16,25 @@ from restorer import FaceRestorer
 from swapper import FaceSwapper
 from utils import resize_if_too_large
 
+logger = logging.getLogger(__name__)
+
 
 class SwapPipeline:
     def __init__(self, models_dir: str):
-        print("[pipeline] Initializing detector (UniFace auto-downloads)...")
+        logger.info("Initializing detector (UniFace auto-downloads)...")
         self.detector = RobustFaceDetector()
 
-        print("[pipeline] Loading inswapper_128.onnx...")
+        logger.info("Loading inswapper_128.onnx...")
         self.swapper = FaceSwapper(os.path.join(models_dir, "inswapper_128.onnx"))
 
-        print("[pipeline] Initializing blender (XSeg/BiSeNet)...")
+        logger.info("Initializing blender (XSeg/BiSeNet)...")
         self.blender = FaceBlender()
 
-        print("[pipeline] Loading GFPGAN restorer...")
+        logger.info("Loading GFPGAN restorer...")
         self.restorer = FaceRestorer(os.path.join(models_dir, "gfpgan_1.4.onnx"))
 
         self.models_loaded = True
-        print("[pipeline] All models ready.")
+        logger.info("All models ready.")
 
     def run(
         self,
@@ -91,7 +94,7 @@ class SwapPipeline:
         t = time.time()
         swapped = self.swapper.swap(target_img_bgr, target_struct, source_struct)
         timings["swap"] = time.time() - t
-        print(f"[pipeline] swap: {timings['swap']:.2f}s")
+        logger.info(f"swap: {timings['swap']:.2f}s")
 
         # ── STAGE 6 & 7: Blend seam ───────────────────────────────────
         # Pass target_face (not source_face) — the mask covers the TARGET
@@ -99,7 +102,7 @@ class SwapPipeline:
         t = time.time()
         blended = self.blender.blend(swapped, target_img_bgr, target_face)
         timings["blend"] = time.time() - t
-        print(f"[pipeline] blend: {timings['blend']:.2f}s")
+        logger.info(f"blend: {timings['blend']:.2f}s")
 
         # ── STAGE 8: Face restoration ─────────────────────────────────
         if enhance and self.restorer.is_available():
@@ -107,9 +110,9 @@ class SwapPipeline:
             try:
                 blended = self.restorer.restore(blended, target_face["bbox"])
                 timings["restore"] = time.time() - t
-                print(f"[pipeline] restore: {timings['restore']:.2f}s")
+                logger.info(f"restore: {timings['restore']:.2f}s")
             except Exception as e:
-                print(f"[pipeline] GFPGAN failed (non-fatal): {e}")
+                logger.error(f"GFPGAN failed (non-fatal): {e}")
                 warnings.append(
                     "Restoration step failed — returning unrestored result."
                 )
@@ -123,7 +126,7 @@ class SwapPipeline:
         blended = cv2.addWeighted(blended, 1.6, gaussian, -0.6, 0)
         blended = np.clip(blended, 0, 255).astype(np.uint8)
 
-        print(f"[pipeline] total: {sum(timings.values()):.2f}s | stages: {timings}")
+        logger.info(f"total: {sum(timings.values()):.2f}s | stages: {timings}")
         return blended, warnings
 
 

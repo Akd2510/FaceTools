@@ -1,14 +1,23 @@
+import asyncio
+import logging
 import os
 import traceback
 from contextlib import asynccontextmanager
 
-import requests
+import httpx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pipeline import SwapPipeline
 from utils import numpy_to_base64_png, read_image_from_upload, verify_model_file
+
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 MODELS_DIR = os.getenv("MODELS_DIR", "./models")
 TEMPLATES_DIR = os.getenv("TEMPLATES_DIR", "./templates")
@@ -17,7 +26,7 @@ TEMPLATES_DIR = os.getenv("TEMPLATES_DIR", "./templates")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Preload models
-    print("[main] Preloading models...")
+    logger.info("Preloading models...")
     inswapper_path = os.path.join(MODELS_DIR, "inswapper_128.onnx")
     gfpgan_path = os.path.join(MODELS_DIR, "gfpgan_1.4.onnx")
 
@@ -28,7 +37,7 @@ async def lifespan(app: FastAPI):
         app.state.pipeline = SwapPipeline(MODELS_DIR)
         app.state.models_loaded = True
     except Exception as e:
-        print(f"[ERROR] Failed to load models: {e}")
+        logger.error(f"Failed to load models: {e}")
         traceback.print_exc()
         app.state.models_loaded = False
 
@@ -62,10 +71,11 @@ async def swap(
         source_img = read_image_from_upload(source_bytes)
         target_img = read_image_from_upload(target_bytes)
 
-        result_img, warnings = app.state.pipeline.run(
-            source_img, target_img, enhance=enhance
+        # Offload CPU-bound pipeline run to a separate thread to prevent event loop blocking
+        result_img, warnings = await asyncio.to_thread(
+            app.state.pipeline.run, source_img, target_img, enhance=enhance
         )
-        print(f"[main] Swap completed. Warnings: {warnings}")
+        logger.info(f"Swap completed. Warnings: {warnings}")
 
         base64_res = numpy_to_base64_png(result_img)
 
@@ -74,6 +84,7 @@ async def swap(
     except ValueError as ve:
         return JSONResponse(status_code=400, content={"error": str(ve)})
     except Exception as e:
+        logger.error(f"Internal server error: {e}")
         traceback.print_exc()
         return JSONResponse(
             status_code=500, content={"error": "Internal server error."}
@@ -85,28 +96,33 @@ async def swap_url(source_url: str, target_url: str, enhance: bool = True):
     if not app.state.models_loaded:
         raise HTTPException(status_code=500, detail="Models not loaded on server.")
 
+    async def download_img(client: httpx.AsyncClient, url: str):
+        if not url.startswith(("http://", "https://")):
+            raise ValueError("Only http/https URLs allowed.")
+        resp = await client.get(url, timeout=10.0)
+        resp.raise_for_status()
+        return read_image_from_upload(resp.content)
+
     try:
+        async with httpx.AsyncClient() as client:
+            # Concurrent URL downloads via asyncio.gather
+            source_img, target_img = await asyncio.gather(
+                download_img(client, source_url),
+                download_img(client, target_url),
+            )
 
-        def download_img(url):
-            if not url.startswith(("http://", "https://")):
-                raise ValueError("Only http/https URLs allowed.")
-            resp = requests.get(url, timeout=10)
-            resp.raise_for_status()
-            return read_image_from_upload(resp.content)
-
-        source_img = download_img(source_url)
-        target_img = download_img(target_url)
-
-        result_img, warnings = app.state.pipeline.run(
-            source_img, target_img, enhance=enhance
+        # Offload CPU-bound pipeline run to a separate thread
+        result_img, warnings = await asyncio.to_thread(
+            app.state.pipeline.run, source_img, target_img, enhance=enhance
         )
-        print(f"[main] Swap completed. Warnings: {warnings}")
+        logger.info(f"Swap completed. Warnings: {warnings}")
         base64_res = numpy_to_base64_png(result_img)
 
         return {"result": base64_res, "warnings": warnings}
     except ValueError as ve:
         return JSONResponse(status_code=400, content={"error": str(ve)})
     except Exception as e:
+        logger.error(f"URL Swap error: {e}")
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": str(e)})
 

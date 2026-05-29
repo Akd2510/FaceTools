@@ -3,8 +3,13 @@ Blending pipeline: XSeg mask → color correction → alpha/Poisson blend.
 Mask is generated from TARGET face region on the SWAPPED image.
 """
 
+import logging
+
 import cv2
 import numpy as np
+from utils import get_ort_providers
+
+logger = logging.getLogger(__name__)
 
 try:
     from uniface.parsing import XSeg
@@ -25,13 +30,14 @@ except ImportError:
 class FaceBlender:
     def __init__(self):
         if PARSER_CLASS is not None:
-            self.segmenter = PARSER_CLASS(providers=["CPUExecutionProvider"])
-            print(f"[blender] Using {PARSER_NAME} for face masking.")
+            providers = get_ort_providers()
+            logger.info(
+                f"Using {PARSER_NAME} for face masking with providers: {providers}"
+            )
+            self.segmenter = PARSER_CLASS(providers=providers)
         else:
             self.segmenter = None
-            print(
-                "[blender] WARNING: No segmenter available — using bbox fallback mask."
-            )
+            logger.warning("No segmenter available — using bbox fallback mask.")
 
     def get_mask(
         self, img_bgr: np.ndarray, face_dict: dict, padding_ratio: float = 0.25
@@ -73,14 +79,14 @@ class FaceBlender:
 
         # Tier 2: Convex hull of 106pt landmarks
         if mask_crop is None and lmks_106 is not None:
-            print("[blender] Tier 1 failed, falling back to Tier 2 (Landmark Hull)")
+            logger.info("Tier 1 failed, falling back to Tier 2 (Landmark Hull)")
             # Adjust landmarks to crop coordinates
             crop_lmks = lmks_106 - [cx1, cy1]
             mask_crop = _landmark_hull_mask(crop_lmks, (crop_h, crop_w))
 
         # Tier 3: Ellipse fitted to bbox
         if mask_crop is None:
-            print("[blender] Tier 1 & 2 failed, falling back to Tier 3 (Bbox Ellipse)")
+            logger.info("Tier 1 & 2 failed, falling back to Tier 3 (Bbox Ellipse)")
             mask_crop = _bbox_ellipse_mask(
                 [pad_x, pad_y, pad_x + fw, pad_y + fh], (crop_h, crop_w)
             )
@@ -167,7 +173,7 @@ class FaceBlender:
             )
             return result
         except cv2.error as e:
-            print(f"[blender] seamlessClone failed ({e}), falling back to alpha blend.")
+            logger.error(f"seamlessClone failed ({e}), falling back to alpha blend.")
             mask_3ch = np.stack([mask] * 3, axis=-1)
             return (swapped * mask_3ch + target * (1.0 - mask_3ch)).astype(np.uint8)
 
@@ -211,7 +217,7 @@ def _run_segmenter(segmenter, crop: np.ndarray) -> np.ndarray:
                         )
                     return result.astype(np.float32)
         except Exception as e:
-            print(f"[blender] segmenter.{method_name}() failed: {e}")
+            logger.error(f"segmenter.{method_name}() failed: {e}")
             continue
     return None
 

@@ -19,6 +19,7 @@
     build:
       context: ./facevision-backend
       dockerfile: Dockerfile
+    image: akshatdikshit/facevision-backend:latest
     container_name: facevision_backend
     restart: unless-stopped
     environment:
@@ -42,6 +43,7 @@
     build:
       context: ./faceswap-backend
       dockerfile: Dockerfile
+    image: akshatdikshit/faceswap-backend:latest
     container_name: faceswap_backend
     restart: unless-stopped
     environment:
@@ -62,6 +64,7 @@
         NODE_OPTIONS: "--max_old_space_size=2048"
         CI: "false"
         GENERATE_SOURCEMAP: "false"
+    image: akshatdikshit/facevision-frontend:latest
     container_name: facetools_frontend
     restart: unless-stopped
     environment:

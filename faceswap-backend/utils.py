@@ -1,8 +1,25 @@
 import base64
+import logging
 import os
 
 import cv2
 import numpy as np
+import onnxruntime as ort
+
+logger = logging.getLogger(__name__)
+
+
+def get_ort_providers():
+    """
+    Returns a list of available ONNX Runtime providers,
+    prioritizing CUDAExecutionProvider if available.
+    """
+    available = ort.get_available_providers()
+    providers = []
+    if "CUDAExecutionProvider" in available:
+        providers.append("CUDAExecutionProvider")
+    providers.append("CPUExecutionProvider")
+    return providers
 
 
 def read_image_from_upload(file_bytes: bytes) -> np.ndarray:
@@ -45,8 +62,8 @@ def verify_model_file(path: str, name: str) -> bool:
     Verifies if a model file exists and logs its size.
     """
     if not os.path.exists(path):
-        print(f"[WARNING] {name} not found at {path}")
+        logger.warning(f"{name} not found at {path}")
         return False
     size_mb = os.path.getsize(path) / 1e6
-    print(f"[OK] {name} loaded — {size_mb:.1f} MB")
+    logger.info(f"{name} loaded — {size_mb:.1f} MB")
     return True

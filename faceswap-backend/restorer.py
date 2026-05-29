@@ -5,28 +5,30 @@ Input: 512x512 RGB float32 normalized to [-1, 1]
 Output: 512x512 RGB float32 normalized to [-1, 1]
 """
 
+import logging
 import os
 
 import cv2
 import numpy as np
 import onnxruntime as ort
+from utils import get_ort_providers
+
+logger = logging.getLogger(__name__)
 
 
 class FaceRestorer:
     def __init__(self, model_path: str):
         if not os.path.exists(model_path):
-            print(
-                f"[restorer] GFPGAN not found at {model_path} — restoration disabled."
-            )
+            logger.warning(f"GFPGAN not found at {model_path} — restoration disabled.")
             self.session = None
             return
 
-        self.session = ort.InferenceSession(
-            model_path, providers=["CPUExecutionProvider"]
-        )
+        providers = get_ort_providers()
+        logger.info(f"Loading GFPGAN with providers: {providers}")
+        self.session = ort.InferenceSession(model_path, providers=providers)
         self.input_name = self.session.get_inputs()[0].name
         self.input_size = 512
-        print(f"[restorer] GFPGAN loaded ({os.path.getsize(model_path) / 1e6:.0f} MB)")
+        logger.info(f"GFPGAN loaded ({os.path.getsize(model_path) / 1e6:.0f} MB)")
 
     def restore(
         self, img_bgr: np.ndarray, bbox: np.ndarray, padding_ratio: float = 0.25
@@ -69,7 +71,7 @@ class FaceRestorer:
         try:
             out = self.session.run(None, {self.input_name: tensor})[0][0]
         except Exception as e:
-            print(f"[restorer] GFPGAN inference failed: {e}")
+            logger.error(f"GFPGAN inference failed: {e}")
             return img_bgr
 
         # Postprocess

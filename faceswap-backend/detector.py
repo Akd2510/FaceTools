@@ -3,27 +3,34 @@ Face detection using UniFace. Returns dicts with bbox, 5pt keypoints,
 106pt landmarks, ArcFace embedding, confidence, and optional pose warning.
 """
 
+import logging
+
 import cv2
 import numpy as np
 from face_struct import align_face_to_112
 from uniface import ArcFace, Landmark106, YOLOv8Face
+from utils import get_ort_providers
+
+logger = logging.getLogger(__name__)
 
 
 class RobustFaceDetector:
     def __init__(self):
-        self.detector = YOLOv8Face(providers=["CPUExecutionProvider"])
-        self.recognizer = ArcFace(providers=["CPUExecutionProvider"])
-        self.landmarker = Landmark106(providers=["CPUExecutionProvider"])
+        providers = get_ort_providers()
+        logger.info(f"Initializing detector with providers: {providers}")
+        self.detector = YOLOv8Face(providers=providers)
+        self.recognizer = ArcFace(providers=providers)
+        self.landmarker = Landmark106(providers=providers)
 
         # Robustness Addition 2: UniFace API probe
         self._probe_uniface_api()
 
     def _probe_uniface_api(self):
-        print(
-            f"[detector] ArcFace methods: {[m for m in dir(self.recognizer) if not m.startswith('_')]}"
+        logger.info(
+            f"ArcFace methods: {[m for m in dir(self.recognizer) if not m.startswith('_')]}"
         )
-        print(
-            f"[detector] Landmark106 methods: {[m for m in dir(self.landmarker) if not m.startswith('_')]}"
+        logger.info(
+            f"Landmark106 methods: {[m for m in dir(self.landmarker) if not m.startswith('_')]}"
         )
 
     def get_faces(self, img_bgr: np.ndarray, min_face_px: int = 80) -> list:
@@ -50,7 +57,7 @@ class RobustFaceDetector:
                     break
             except Exception as e:
                 last_err = e
-                print(f"[detector] Detection attempt {attempt} failed: {e}")
+                logger.warning(f"Detection attempt {attempt} failed: {e}")
                 continue
 
         if not raw_faces:
@@ -59,10 +66,7 @@ class RobustFaceDetector:
                 "and a visible, unobstructed face."
             )
 
-        print(
-            f"[detector] Found {len(raw_faces)} raw face candidates. Processing...",
-            flush=True,
-        )
+        logger.info(f"Found {len(raw_faces)} raw face candidates. Processing...")
 
         valid = []
         for face in raw_faces:
@@ -70,25 +74,18 @@ class RobustFaceDetector:
             w, h = x2 - x1, y2 - y1
 
             if w < min_face_px or h < min_face_px:
-                print(
-                    f"[detector] Rejected face: too small ({w}x{h} < {min_face_px})",
-                    flush=True,
-                )
+                logger.info(f"Rejected face: too small ({w}x{h} < {min_face_px})")
                 continue
             if face.confidence < 0.50:
-                print(
-                    f"[detector] Rejected face: low confidence ({face.confidence:.2f} < 0.50)",
-                    flush=True,
+                logger.info(
+                    f"Rejected face: low confidence ({face.confidence:.2f} < 0.50)"
                 )
                 continue
 
             # 5-point landmarks from detector (used for alignment + embedding)
             kps_5pt = np.array(face.landmarks, dtype=np.float32)
             if kps_5pt.shape != (5, 2):
-                print(
-                    f"[detector] Rejected face: malformed landmarks {kps_5pt.shape}",
-                    flush=True,
-                )
+                logger.warning(f"Rejected face: malformed landmarks {kps_5pt.shape}")
                 continue  # malformed detection, skip
 
             # 106-point landmark refinement (used for masking)
@@ -111,16 +108,11 @@ class RobustFaceDetector:
                 if embedding is not None:
                     embedding = np.array(embedding, dtype=np.float32).squeeze()
                     if embedding.size == 512:
-                        print(
-                            f"[detector] Embedding success (internal alignment)",
-                            flush=True,
-                        )
+                        logger.info("Embedding success (internal alignment)")
                     else:
                         embedding = None
             except Exception as e:
-                print(
-                    f"[detector] Internal alignment embedding failed: {e}", flush=True
-                )
+                logger.error(f"Internal alignment embedding failed: {e}")
 
             if embedding is None:
                 try:
@@ -130,22 +122,14 @@ class RobustFaceDetector:
                     if embedding is not None:
                         embedding = np.array(embedding, dtype=np.float32).squeeze()
                         if embedding.size == 512:
-                            print(
-                                f"[detector] Embedding success (manual alignment)",
-                                flush=True,
-                            )
+                            logger.info("Embedding success (manual alignment)")
                         else:
                             embedding = None
                 except Exception as e:
-                    print(
-                        f"[detector] Manual alignment embedding failed: {e}", flush=True
-                    )
+                    logger.error(f"Manual alignment embedding failed: {e}")
 
             if embedding is None or embedding.size != 512:
-                print(
-                    f"[detector] Rejected face: embedding invalid (None or size!=512)",
-                    flush=True,
-                )
+                logger.warning("Rejected face: embedding invalid (None or size!=512)")
                 continue
 
             # Pose estimation
@@ -153,9 +137,8 @@ class RobustFaceDetector:
             pose_warning = _estimate_pose_warning(kps_5pt, face.bbox)
 
             # Log for debugging
-            print(
-                f"[detector] Face at {face.bbox[:2]}: score={face.confidence:.2f}, pose={pose_warning}",
-                flush=True,
+            logger.info(
+                f"Face at {face.bbox[:2]}: score={face.confidence:.2f}, pose={pose_warning}"
             )
 
             # DISABLE HARD REJECT for troubleshooting — convert to warning instead
@@ -215,9 +198,8 @@ def _estimate_pose_warning(kps_5pt: np.ndarray, bbox) -> str:
         face_width = abs(bbox[2] - bbox[0]) + 1e-6
         ratio = eye_width / face_width
 
-        print(
-            f"[detector] Pose check: eye_dist={eye_width:.1f}, face_w={face_width:.1f}, ratio={ratio:.3f}",
-            flush=True,
+        logger.info(
+            f"Pose check: eye_dist={eye_width:.1f}, face_w={face_width:.1f}, ratio={ratio:.3f}"
         )
 
         # ratio ~0.42 = frontal, drops toward 0 at profile
