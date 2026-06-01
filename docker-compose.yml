@@ -1,4 +1,6 @@
-﻿services:
+﻿version: "3.8"
+
+services:
   db:
     image: postgres:15-alpine
     container_name: facetools_db
@@ -16,20 +18,16 @@
       retries: 5
 
   facevision_backend:
-    build:
-      context: ./facevision-backend
-      dockerfile: Dockerfile
     image: akshatdikshit/facevision-backend:latest
     container_name: facevision_backend
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://facevision:facevision_secret@db:5432/facevision
       DJANGO_SECRET_KEY: "facetools-secret-key-123"
-      DJANGO_DEBUG: "True"
-      ALLOWED_HOSTS: "localhost,127.0.0.1,facevision_backend"
+      DJANGO_DEBUG: "False"
+      ALLOWED_HOSTS: "*"
       MEDIA_ROOT: /app/media
     volumes:
-      - ./facevision-backend:/app
       - media_files:/app/media
     depends_on:
       db:
@@ -40,9 +38,6 @@
              gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120"
 
   faceswap_backend:
-    build:
-      context: ./faceswap-backend
-      dockerfile: Dockerfile
     image: akshatdikshit/faceswap-backend:latest
     container_name: faceswap_backend
     restart: unless-stopped
@@ -52,18 +47,9 @@
       - TEMPLATES_DIR=/app/templates
     volumes:
       - ./models:/app/models
-      - ./templates:/app/templates
-    working_dir: /app
     command: uvicorn main:app --host 0.0.0.0 --port 8000
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        NODE_OPTIONS: "--max_old_space_size=2048"
-        CI: "false"
-        GENERATE_SOURCEMAP: "false"
     image: akshatdikshit/facevision-frontend:latest
     container_name: facetools_frontend
     restart: unless-stopped
@@ -74,13 +60,14 @@
       - faceswap_backend
 
   nginx:
-    image: nginx:alpine
+    # Using your new custom image!
+    image: akshatdikshit/facetools-nginx:latest
     container_name: facetools_nginx
     restart: unless-stopped
     ports:
       - "80:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # No more local nginx.conf mount needed!
       - media_files:/app/media:ro
     depends_on:
       - facevision_backend
