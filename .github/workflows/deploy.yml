@@ -10,17 +10,49 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v4
+      # 1. Build and Push FaceSwap Backend
+      - name: Build and push FaceSwap Backend
+        uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./faceswap-backend
+          file: ./faceswap-backend/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/faceswap-app:latest
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/faceswap-backend:latest
+
+      # 2. Build and Push FaceVision Backend
+      - name: Build and push FaceVision Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./facevision-backend
+          file: ./facevision-backend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/facevision-backend:latest
+
+      # 3. Build and Push Frontend
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/facevision-frontend:latest
+
+      # 4. Build and Push Nginx Gateway
+      - name: Build and push Nginx Gateway
+        uses: docker/build-push-action@v5
+        with:
+          context: ./nginx
+          file: ./nginx/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/facetools-nginx:latest
